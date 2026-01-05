@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: ghcr.io/egobb/car-pooling:latest
+    ports:
+      - "8080:8080"
+    environment:
+      JAVA_OPTS: ""

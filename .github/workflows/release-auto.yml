@@ -1,0 +1,39 @@
+name: Release (auto on main)
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write    # crear tags y commits
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # necesario para semantic-release
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build JAR (skip tests)
+        run: ./mvnw -f app/pom.xml -B -DskipTests package
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run semantic-release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
