@@ -1,0 +1,74 @@
+name: Sync main → develop (auto PR)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  open-sync-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Use full history for accurate comparisons
+
+      - name: Open PR to sync main into develop
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Check that 'develop' branch exists
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.repos.getBranch({ owner, repo, branch: 'develop' });
+            } catch {
+              core.info('Branch "develop" not found. Skipping.');
+              return;
+            }
+
+            // Compare commits: how far ahead is main compared to develop?
+            const cmp = await github.rest.repos.compareCommits({
+              owner, repo, base: 'develop', head: 'main'
+            });
+            if (cmp.data.ahead_by === 0) {
+              core.info('No commits to sync from main to develop.');
+              return;
+            }
+
+            // Avoid duplicates: is there already an open PR main → develop?
+            const { data: prs } = await github.rest.pulls.list({
+              owner, repo, state: 'open', base: 'develop', head: `${owner}:main`
+            });
+            if (prs.length > 0) {
+              core.info(`An open PR already exists: #${prs[0].number}`);
+              return;
+            }
+
+            // Create the PR
+            const title = 'chore(sync): merge main into develop';
+            const body = [
+              'Automated PR to keep `develop` up to date with `main`.',
+              `Commits to sync: ${cmp.data.ahead_by}`,
+              '',
+              '> This PR was opened automatically after a push to `main`.'
+            ].join('\n');
+
+            const pr = await github.rest.pulls.create({
+              owner, repo, title, head: 'main', base: 'develop', body
+            });
+
+            // Optionally add labels to the PR
+            try {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: pr.data.number, labels: ['sync', 'auto-pr']
+              });
+            } catch {
+              core.warning('Could not add labels to the PR.');
+            }
+
+            core.notice(`Opened PR #${pr.data.number} main → develop`);
